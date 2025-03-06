@@ -547,7 +547,7 @@ class TriggerDetails(TypedDict):
     events: int
 
 
-class TriggerRunner:
+class TriggerRunner(LoggingMixin):
     """
     Runtime environment for all triggers.
 
@@ -578,9 +578,6 @@ class TriggerRunner:
     # Should-we-stop flag
     # TODO: set this in a sig-int handler
     stop: bool = False
-
-    # TODO: connect this to the parent process
-    log: FilteringBoundLogger = structlog.get_logger()
 
     requests_sock: asyncio.StreamWriter
 

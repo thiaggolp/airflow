@@ -18,9 +18,15 @@
 from __future__ import annotations
 
 import json
+import logging
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, NoReturn
 
 from airflow.models import Log
 from airflow.sdk.execution_time.secrets_masker import DEFAULT_SENSITIVE_FIELDS
+
+if TYPE_CHECKING:
+    from structlog.typing import EventDict, WrappedLogger
 
 
 def _masked_value_check(data, sensitive_fields):
@@ -69,3 +75,188 @@ def check_last_log(session, dag_id, event, logical_date, expected_extra=None, ch
         _masked_value_check(extra_json, DEFAULT_SENSITIVE_FIELDS)
 
     session.query(Log).delete()
+
+
+class StructlogCapture:
+    """
+    Test that structlog messages are logged.
+
+    This extends the feature built in to structlog to make it easier to find if a message is logged.
+
+    >>> def test_something(cap_structlog):
+    ...     log.info("some event", field1=False, field2=[1, 2])
+    ...     log.info("some event", field1=True)
+    ...     assert "some_event" in cap_structlog  # a string searches on `event` field
+    ...     assert {"event": "some_event", "field1": True} in cap_structlog  # Searches only on passed fields
+    ...     assert {"field2": [1, 2]} in cap_structlog
+    ...
+    ...     assert "not logged" not in cap_structlog  # not in works too
+
+    This fixture class will also manage the log level of stdlib loggers via ``at_level`` and ``set_level``.
+    """
+
+    # This class is a manual mixing of pytest's LogCaptureFixture and structlog's LogCapture class, but
+    # tailored to Airflow's "send all logs via structlog" approach
+
+    _logger: str | None = None
+    """The logger we specifically want to capture log messages from"""
+
+    def __init__(self):
+        self.entries = []
+        self._initial_logger_levels: dict[str | None, int] = {}
+
+    def _finalize(self) -> None:
+        """
+        Finalize the fixture.
+
+        This restores the log levels and the disabled logging levels changed by :meth:`set_level`.
+        """
+        from airflow._logging.structlog import PER_LOGGER_LEVELS
+
+        for logger_name, level in self._initial_logger_levels.items():
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(level)
+            if level is logging.NOTSET:
+                del PER_LOGGER_LEVELS[logger_name]
+            else:
+                PER_LOGGER_LEVELS[logger_name] = level
+
+    def __contains__(self, target):
+        import operator
+
+        if isinstance(target, str):
+
+            def predicate(e):
+                return e["event"] == target
+        elif isinstance(target, dict):
+            # Partial comparison -- only check keys passed in
+            get = operator.itemgetter(*target.keys())
+            want = tuple(target.values())
+
+            def predicate(e):
+                try:
+                    return get(e) == want
+                except Exception:
+                    return False
+        else:
+            raise TypeError(f"Can't search logs using {type(target)}")
+
+        return any(predicate(e) for e in self.entries)
+
+    def __getitem__(self, i):
+        return self.entries[i]
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def __repr__(self):
+        return repr(self.entries)
+
+    def __call__(self, logger: WrappedLogger, method_name: str, event_dict: EventDict) -> NoReturn:
+        from structlog import DropEvent
+        from structlog._log_levels import map_method_name
+
+        from airflow._logging.structlog import (
+            NamedBytesLogger,
+            NamedWriteLogger,
+        )
+
+        logger_name = (
+            event_dict.get("logger_name")
+            or event_dict.get("logger")
+            or (isinstance(logger, (NamedBytesLogger, NamedWriteLogger)) and logger.name)
+            or ""
+        )
+        if not self._logger or logger_name.startswith(self._logger):
+            event_dict["log_level"] = map_method_name(method_name)
+            self.entries.append(event_dict)
+
+        raise DropEvent
+
+    @property
+    def text(self):
+        """All the event text as a single multi-line string."""
+        return "\n".join(e["event"] for e in self.entries)
+
+    # These next fns make it duck-type the same as Pytests "caplog" fixture
+    @property
+    def messages(self):
+        """All the event messages as a list."""
+        return [e["event"] for e in self.entries]
+
+    def _force_enable_logging(self, level: int, logger_obj: logging.Logger) -> int:
+        """
+        Enable the desired logging level if the global level was disabled via ``logging.disabled``.
+
+        Only enables logging levels greater than or equal to the requested ``level``.
+
+        Does nothing if the desired ``level`` wasn't disabled.
+
+        :param level:
+            The logger level caplog should capture.
+            All logging is enabled if a non-standard logging level string is supplied.
+            Valid level strings are in :data:`logging._nameToLevel`.
+        :param logger_obj: The logger object to check.
+
+        :return: The original disabled logging level.
+        """
+        original_disable_level: int = logger_obj.manager.disable
+
+        if not logger_obj.isEnabledFor(level):
+            # Each level is `10` away from other levels.
+            # https://docs.python.org/3/library/logging.html#logging-levels
+            disable_level = max(level - 10, logging.NOTSET)
+            logging.disable(disable_level)
+
+        return original_disable_level
+
+    @contextmanager
+    def at_level(self, level: str | int, logger=None):
+        from airflow._logging.structlog import NAME_TO_LEVEL, PER_LOGGER_LEVELS
+
+        if isinstance(level, str):
+            level = NAME_TO_LEVEL[level.lower()]
+
+        key = logger or ""
+        old = PER_LOGGER_LEVELS.get(key, logging.NOTSET)
+        PER_LOGGER_LEVELS[key] = level
+        stdlogger = logging.getLogger(key)
+        stdlogger.setLevel(level)
+        hdlr = orig_hdlr_level = None
+        if stdlogger.handlers:
+            hdlr = stdlogger.handlers[0]
+            orig_hdlr_level = hdlr.level
+            hdlr.setLevel(level)
+        try:
+            yield self
+        finally:
+            stdlogger.setLevel(old)
+            if hdlr is not None:
+                hdlr.setLevel(orig_hdlr_level)
+            if old is logging.NOTSET:
+                del PER_LOGGER_LEVELS[key]
+            else:
+                PER_LOGGER_LEVELS[key] = old
+
+    def set_level(self, level: str | int, logger=None):
+        from airflow._logging.structlog import NAME_TO_LEVEL, PER_LOGGER_LEVELS
+
+        # Set the global level
+        if isinstance(level, str):
+            level = NAME_TO_LEVEL[level.lower()]
+
+        key = logger or ""
+
+        stdlogger = logging.getLogger(key)
+        self._initial_logger_levels[key] = PER_LOGGER_LEVELS.get(key, logging.NOTSET)
+
+        PER_LOGGER_LEVELS[key] = level
+        stdlogger.setLevel(level)
+        self._logger = logger
+
+    def clear(self):
+        self.entries = []
+
+    @property
+    def records(self):
+        return self.entries
