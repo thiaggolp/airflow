@@ -25,6 +25,8 @@ import deDashboard from "./locales/de/dashboard.json";
 import enCommon from "./locales/en/common.json";
 import enDags from "./locales/en/dags.json";
 import enDashboard from "./locales/en/dashboard.json";
+import hiCommon from "./locales/hi/common.json";
+import hiDashboard from "./locales/hi/dashboard.json";
 import koCommon from "./locales/ko/common.json";
 import koDashboard from "./locales/ko/dashboard.json";
 import nlCommon from "./locales/nl/common.json";
@@ -41,6 +43,7 @@ import zhTWDashboard from "./locales/zh-TW/dashboard.json";
 export const supportedLanguages = [
   { code: "de", name: "Deutsch" },
   { code: "en", name: "English" },
+  { code: "hi", name: "हिन्दी" },
   { code: "ko", name: "한국어" },
   { code: "nl", name: "Nederlands" },
   { code: "pl", name: "Polski" },
@@ -59,6 +62,10 @@ const resources = {
     common: enCommon,
     dags: enDags,
     dashboard: enDashboard,
+  },
+  hi: {
+    common: hiCommon,
+    dashboard: hiDashboard,
   },
   ko: {
     common: koCommon,
