@@ -10,9 +10,7 @@ import logging
 import pandas as pd
 
 # --- Configurações ---
-BUCKET_NAME = "streaming-data"
-FILENAME_TEMPLATE = "engagement_data/{date}.csv"
-LOCAL_PATH = "/opt/airflow/tmp/"
+BASE_LOCAL_PATH = "/host_files/Arquivos Case"
 
 default_args = {
     "owner": "data-eng",
@@ -35,18 +33,17 @@ with DAG(
     @task()
     def check_file():
         date_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        filename = FILENAME_TEMPLATE.format(date=date_str)
-        logging.info(f"Verificando arquivo: {filename}")
-        # Simula a verificação (substitua pelo S3Hook real se necessário)
-        filepath = f"/opt/airflow/include/{filename.split('/')[-1]}"
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Arquivo {filepath} não encontrado.")
-        return filepath
+        full_path = os.path.join(BASE_LOCAL_PATH, f"{date_str}.csv")
+        logging.info(f"Verificando arquivo local: {full_path}")
+        
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"Arquivo {full_path} não encontrado.")
+        return full_path
 
     @task()
     def download_file(filepath: str):
         logging.info(f"Simulando download do arquivo: {filepath}")
-        return filepath  # Simulação: já está disponível localmente
+        return filepath  # Simulação: arquivo já está disponível localmente
 
     @task()
     def load_to_warehouse(file_path: str):
@@ -61,12 +58,10 @@ with DAG(
 
     @task()
     def validate_kpis():
-        logging.info("Simulando validação de KPIs...")
-        # Simulação de validação
-        views_ok = True
-        duration_ok = True
-        if not (views_ok and duration_ok):
-            raise ValueError("Falha na validação dos KPIs")
+        logging.info("Simulando validação dos KPIs...")
+        # Exemplo de checagem real:
+        # if df['views'].isnull().any():
+        #     raise ValueError("Valores nulos detectados")
         return "KPIs validados"
 
     notify_success = PythonOperator(
@@ -83,10 +78,9 @@ with DAG(
     end = EmptyOperator(task_id="end")
 
     # --- Encadeamento ---
-    path = check_file()
-    local = download_file(path)
-    loaded = load_to_warehouse(local)
+    file_path = check_file()
+    loaded = load_to_warehouse(file_path)
     transformed = run_dbt_job()
     validated = validate_kpis()
 
-    start >> path >> local >> loaded >> transformed >> validated >> [notify_success, notify_failure] >> end
+    start >> file_path >> loaded >> transformed >> validated >> [notify_success, notify_failure] >> end
