@@ -74,7 +74,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
-    - /c/Users/thiag/Downloads/Cases 1 e 2:/host_files/Arquivos Case
+    - /c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
