@@ -3,7 +3,7 @@ from airflow.decorators import task
 from airflow.utils.dates import days_ago
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
-#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 import datetime
 import os
@@ -26,7 +26,7 @@ with DAG(
     schedule_interval="0 6 * * *",  # Executa às 6h da manhã
     start_date=days_ago(1),
     catchup=False,
-    tags=["engajamento", "streaming"],
+    tags=["engajamento", "streaming", "case"],
 ) as dag:
 
     start = EmptyOperator(task_id="start")
