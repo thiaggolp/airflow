@@ -69,14 +69,7 @@ x-airflow-common:
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
-  services:
-  webserver:
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - "/c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case:/host_files/Arquivos Case"
-
+  
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -125,6 +118,11 @@ services:
       retries: 5
       start_period: 30s
     restart: always
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - "/c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case:/host_files/Arquivos Case"
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -178,6 +176,11 @@ services:
       retries: 5
       start_period: 30s
     restart: always
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - "/c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case:/host_files/Arquivos Case"
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -246,6 +249,7 @@ services:
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
+      - "/c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case:/host_files/Arquivos Case"
 
   airflow-cli:
     <<: *airflow-common
@@ -259,6 +263,11 @@ services:
       - bash
       - -c
       - airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - "/c/Users/thiag/Downloads/Cases 1 e 2/Arquivos Case:/host_files/Arquivos Case"
 
   # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
   # or by explicitly targeted on the command line e.g. docker-compose up flower.
