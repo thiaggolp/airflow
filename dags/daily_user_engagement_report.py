@@ -32,14 +32,31 @@ with DAG(
 
     @task()
     def check_file():
-        date_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        full_path = os.path.join(BASE_LOCAL_PATH, f"{date_str}.csv")
-        logging.info(f"Verificando arquivo local: {full_path}")
-        
-        if not os.path.exists(full_path):
-            raise FileNotFoundError(f"Arquivo {full_path} não encontrado.")
-        return full_path
+        today = datetime.date.today()
+        candidate_files = []
 
+        logging.info(f"Listando arquivos em: {BASE_LOCAL_PATH}")
+        for fname in os.listdir(BASE_LOCAL_PATH):
+            if fname.endswith(".csv"):
+                try:
+                    date_str = fname.replace(".csv", "")
+                    file_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                    if file_date < today:
+                        full_path = os.path.join(BASE_LOCAL_PATH, fname)
+                        candidate_files.append((file_date, full_path))
+                except ValueError:
+                    logging.warning(f"Arquivo ignorado (nome inválido): {fname}")
+                    continue
+
+            if not candidate_files:
+                raise FileNotFoundError("Nenhum arquivo CSV com data anterior à atual foi encontrado.")
+
+            # Seleciona o mais recente
+            candidate_files.sort(reverse=True)  # ordena do mais recente para o mais antigo
+            selected_file = candidate_files[0][1]
+            logging.info(f"Arquivo selecionado: {selected_file}")
+            return selected_file
+    
     @task()
     def download_file(filepath: str):
         logging.info(f"Simulando download do arquivo: {filepath}")
